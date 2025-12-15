@@ -1,0 +1,13 @@
+# Project Context
+- Backend: NestJS, Prisma, Supabase (PostgreSQL)
+- Frontend: React Native (Expo), NativeWind (Tailwind CSS)
+- Language: TypeScript (Strict mode)
+- Structure: Monorepo (./backend for NestJS, ./frontend for Expo)
+
+# Coding Style Guide
+- [Frontend] Use functional components with hooks.
+- [Frontend] Use `StyleSheet` is forbidden. Always use `NativeWind` classNames.
+- [Frontend] Use `lucide-react-native` for icons.
+- [Backend] Follow NestJS dependency injection patterns.
+- [Backend] Use DTOs for data validation with `class-validator`.
+- [General] Prefer async/await over callbacks.
