@@ -20,8 +20,8 @@ export class MyArchiveItemDto {
   @ApiProperty()
   archiveId: string;
 
-  @ApiProperty()
-  imageUrl: string;
+  @ApiProperty({ type: [String], description: '이미지 URL 배열' })
+  imageUrls: string[];
 
   @ApiProperty()
   brand: string;

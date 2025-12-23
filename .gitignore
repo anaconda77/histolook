@@ -260,3 +260,6 @@ yarn-error.log*
 # Local development
 .vercel
 .turbo
+
+# api-spec for prompt
+api-spec/

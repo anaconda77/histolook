@@ -30,8 +30,8 @@ export class ArchiveItemDto {
   @ApiProperty()
   archiveId: string;
 
-  @ApiPropertyOptional()
-  imageUrl?: string;
+  @ApiProperty({ type: [String], description: '이미지 URL 배열' })
+  imageUrls: string[];
 
   @ApiProperty()
   isInterest: boolean;

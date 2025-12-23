@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OAuth2 로그인 테스트 - Histolook</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 500px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+        
+        h1 {
+            font-size: 32px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        
+        .login-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        
+        .oauth-btn {
+            width: 100%;
+            height: 50px;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            transition: all 0.3s;
+        }
+        
+        .kakao-btn {
+            background-color: #FEE500;
+            color: #000000;
+        }
+        
+        .kakao-btn:hover {
+            background-color: #FDD835;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(254, 229, 0, 0.4);
+        }
+        
+        .google-btn {
+            background-color: #FFFFFF;
+            color: #3c4043;
+            border: 1px solid #dadce0;
+        }
+        
+        .google-btn:hover {
+            background-color: #f8f9fa;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+        
+        .oauth-logo {
+            width: 24px;
+            height: 24px;
+        }
+        
+        .divider {
+            text-align: center;
+            margin: 20px 0;
+            color: #999;
+            font-size: 12px;
+            position: relative;
+        }
+        
+        .divider::before,
+        .divider::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            width: 40%;
+            height: 1px;
+            background: #ddd;
+        }
+        
+        .divider::before {
+            left: 0;
+        }
+        
+        .divider::after {
+            right: 0;
+        }
+        
+        .info-box {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 20px;
+            display: none;
+        }
+        
+        .info-box.show {
+            display: block;
+        }
+        
+        .info-box h3 {
+            font-size: 16px;
+            color: #333;
+            margin-bottom: 15px;
+        }
+        
+        .info-item {
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+        
+        .info-item strong {
+            color: #667eea;
+            display: inline-block;
+            width: 120px;
+        }
+        
+        .info-item span {
+            color: #666;
+            word-break: break-all;
+        }
+        
+        .loading {
+            text-align: center;
+            color: #667eea;
+            font-size: 14px;
+            margin-top: 20px;
+        }
+        
+        .error {
+            background: #fee;
+            border: 1px solid #fcc;
+            border-radius: 12px;
+            padding: 15px;
+            color: #c33;
+            font-size: 14px;
+            margin-top: 20px;
+            display: none;
+        }
+        
+        .error.show {
+            display: block;
+        }
+        
+        .env-info {
+            background: #e3f2fd;
+            border-radius: 12px;
+            padding: 15px;
+            margin-top: 20px;
+            font-size: 12px;
+            color: #1976d2;
+            line-height: 1.6;
+        }
+        
+        .env-info code {
+            background: #fff;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .env-section {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #bbdefb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔐 OAuth2 로그인</h1>
+        <p class="subtitle">Histolook 소셜 로그인 테스트 페이지</p>
+        
+        <div class="login-buttons">
+            <button class="oauth-btn kakao-btn" onclick="kakaoLogin()">
+                <svg class="oauth-logo" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 3C6.48 3 2 6.48 2 10.8c0 2.77 1.82 5.2 4.53 6.56-.17 1.15-.49 3.12-.56 3.52-.08.47.17.46.38.33.15-.09 2.42-1.66 3.49-2.38.5.07 1.02.11 1.56.11 5.52 0 10-3.48 10-7.8S17.52 3 12 3z"/>
+                </svg>
+                카카오로 시작하기
+            </button>
+            
+            <button class="oauth-btn google-btn" onclick="googleLogin()">
+                <svg class="oauth-logo" viewBox="0 0 24 24">
+                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                </svg>
+                구글로 시작하기
+            </button>
+        </div>
+        
+        <div id="loading" class="loading" style="display: none;">
+            처리 중입니다...
+        </div>
+        
+        <div id="error" class="error"></div>
+        
+        <div id="info" class="info-box">
+            <h3>✅ AuthUser 생성 완료!</h3>
+            <div class="info-item">
+                <strong>AuthUser ID:</strong>
+                <span id="authUserId"></span>
+            </div>
+            <div class="info-item">
+                <strong>Provider:</strong>
+                <span id="provider"></span>
+            </div>
+            <div class="info-item">
+                <strong>생성 시간:</strong>
+                <span id="createdAt"></span>
+            </div>
+        </div>
+        
+        <div class="env-info">
+            <strong>📌 환경 변수 확인</strong>
+            
+            <div class="env-section">
+                <strong>Kakao:</strong><br>
+                - <code>KAKAO_REST_API_KEY</code><br>
+                - <code>KAKAO_REDIRECT_URI</code><br>
+                Redirect: <code id="kakaoRedirectUri">로딩중...</code>
+            </div>
+            
+            <div class="env-section">
+                <strong>Google:</strong><br>
+                - <code>GOOGLE_CLIENT_ID</code><br>
+                - <code>GOOGLE_CLIENT_SECRET</code><br>
+                - <code>GOOGLE_REDIRECT_URI</code><br>
+                Redirect: <code id="googleRedirectUri">로딩중...</code>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const BASE_URL = window.location.origin;
+        
+        // Redirect URI 표시
+        document.getElementById('kakaoRedirectUri').textContent = BASE_URL + '/api/v1/auth/kakao/callback';
+        document.getElementById('googleRedirectUri').textContent = BASE_URL + '/api/v1/auth/google/callback';
+        
+        // 카카오 로그인
+        function kakaoLogin() {
+            const REST_API_KEY = prompt('KAKAO_REST_API_KEY를 입력하세요:', '');
+            if (!REST_API_KEY) return;
+            
+            const REDIRECT_URI = BASE_URL + '/api/v1/auth/kakao/callback';
+            const kakaoAuthUrl = `https://kauth.kakao.com/oauth/authorize?client_id=${REST_API_KEY}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code`;
+            
+            window.location.href = kakaoAuthUrl;
+        }
+        
+        // 구글 로그인
+        function googleLogin() {
+            const CLIENT_ID = prompt('GOOGLE_CLIENT_ID를 입력하세요:', '');
+            if (!CLIENT_ID) return;
+            
+            const REDIRECT_URI = BASE_URL + '/api/v1/auth/google/callback';
+            const SCOPE = 'https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email';
+            
+            const googleAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=${encodeURIComponent(SCOPE)}&access_type=offline&prompt=consent`;
+            
+            window.location.href = googleAuthUrl;
+        }
+        
+        // URL 파라미터 확인 (콜백 후)
+        const urlParams = new URLSearchParams(window.location.search);
+        const authUserId = urlParams.get('authUserId');
+        const provider = urlParams.get('provider');
+        const createdAt = urlParams.get('createdAt');
+        const error = urlParams.get('error');
+        
+        if (error) {
+            document.getElementById('error').textContent = '❌ ' + decodeURIComponent(error);
+            document.getElementById('error').classList.add('show');
+        }
+        
+        if (authUserId) {
+            document.getElementById('authUserId').textContent = authUserId;
+            document.getElementById('provider').textContent = provider || '-';
+            document.getElementById('createdAt').textContent = createdAt || '-';
+            document.getElementById('info').classList.add('show');
+        }
+        
+        if (urlParams.get('loading')) {
+            document.getElementById('loading').style.display = 'block';
+        }
+    </script>
+</body>
+</html>
+

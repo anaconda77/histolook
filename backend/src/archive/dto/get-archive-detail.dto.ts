@@ -35,6 +35,9 @@ export class GetArchiveDetailResponseDto {
   @ApiProperty()
   story: string;
 
+  @ApiProperty({ type: [String], description: '이미지 URL 배열' })
+  imageUrls: string[];
+
   @ApiProperty()
   authorId: string;
 

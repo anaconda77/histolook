@@ -3,7 +3,10 @@ import { IsBoolean, IsOptional, IsNumber, IsString, Min } from 'class-validator'
 import { Type, Transform } from 'class-transformer';
 
 export class GetCommentsQueryDto {
-  @ApiProperty({ description: '아카이브 여부 (true: 아카이브, false: 탈아카이브)' })
+  @ApiProperty({ 
+    description: '판정 유형 (true: 아카이빙, false: 디아카이빙)',
+    example: true 
+  })
   @Transform(({ value }) => value === 'true' || value === true)
   @IsBoolean()
   archiving: boolean;
@@ -25,11 +28,11 @@ export class CommentItemDto {
   @ApiProperty()
   memberNickName: string;
 
-  @ApiProperty()
-  memberImageUrl: string;
+  @ApiProperty({ nullable: true })
+  memberImageUrl: string | null;
 
-  @ApiProperty()
-  comment: string;
+  @ApiProperty({ nullable: true })
+  comment: string | null;
 
   @ApiProperty()
   publishedAt: string;
