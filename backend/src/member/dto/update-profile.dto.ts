@@ -1,26 +1,25 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsArray, IsNotEmpty, IsOptional, ArrayMinSize } from 'class-validator';
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { IsString, IsArray, IsOptional, ArrayMinSize, ArrayMaxSize, MinLength, MaxLength } from 'class-validator';
 
 export class UpdateProfileDto {
-  @ApiProperty({ description: '닉네임' })
-  @IsString()
-  @IsNotEmpty()
-  nickname: string;
+  @ApiPropertyOptional({ description: '닉네임 (수정 시에만 필요)' })
+  @IsString({ message: '닉네임 누락 혹은 유효 조건 위반' })
+  @IsOptional()
+  @MinLength(2, { message: '닉네임 누락 혹은 유효 조건 위반' })
+  @MaxLength(10, { message: '닉네임 누락 혹은 유효 조건 위반' })
+  nickname?: string;
 
-  @ApiProperty({ description: '역할' })
-  @IsString()
-  @IsNotEmpty()
-  role: string;
-
-  @ApiPropertyOptional({ description: '이미지 URL' })
+  @ApiPropertyOptional({ description: '이미지 URL (수정 시에만 필요)' })
   @IsString()
   @IsOptional()
   imageUrl?: string;
 
-  @ApiProperty({ description: '관심 브랜드 배열', type: [String] })
-  @IsArray()
-  @ArrayMinSize(1)
-  @IsString({ each: true })
-  brandInterests: string[];
+  @ApiPropertyOptional({ description: '관심 브랜드 배열 (수정 시에만 필요)', type: [String] })
+  @IsArray({ message: '관심 브랜드 누락 혹은 유효하지 않은 브랜드(혹은 개수 초과)' })
+  @IsOptional()
+  @ArrayMinSize(1, { message: '관심 브랜드 누락 혹은 유효하지 않은 브랜드(혹은 개수 초과)' })
+  @ArrayMaxSize(3, { message: '관심 브랜드 누락 혹은 유효하지 않은 브랜드(혹은 개수 초과)' })
+  @IsString({ each: true, message: '관심 브랜드 누락 혹은 유효하지 않은 브랜드(혹은 개수 초과)' })
+  brandInterests?: string[];
 }
 

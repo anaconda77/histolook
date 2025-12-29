@@ -54,7 +54,7 @@ export class AuthService {
   /**
    * 0. 카카오 로그인 콜백 처리
    */
-  async kakaoCallback(authorizationCode: string): Promise<InitAuthResponseDto> {
+  async kakaoCallback(authorizationCode: string): Promise<InitAuthResponseDto & { isRegistered: boolean }> {
     // 1. 인가 코드로 액세스 토큰 발급
     const tokenResponse = await this.kakaoOAuthService.getAccessToken(authorizationCode);
     
@@ -66,6 +66,9 @@ export class AuthService {
       where: {
         provider: 'kakao',
         providerId: userInfo.id.toString(),
+      },
+      include: {
+        member: true, // Member 관계 확인
       },
     });
 
@@ -83,6 +86,7 @@ export class AuthService {
         authUserId: existingAuthUser.id,
         provider: 'kakao',
         createdAt: existingAuthUser.createdAt.toISOString(),
+        isRegistered: !!existingAuthUser.member, // Member가 있으면 true
       };
     }
 
@@ -101,13 +105,14 @@ export class AuthService {
       authUserId: authUser.id,
       provider: authUser.provider,
       createdAt: authUser.createdAt.toISOString(),
+      isRegistered: false, // 새로 생성된 경우 항상 false
     };
   }
 
   /**
    * 0-2. 구글 로그인 콜백 처리
    */
-  async googleCallback(authorizationCode: string): Promise<InitAuthResponseDto> {
+  async googleCallback(authorizationCode: string): Promise<InitAuthResponseDto & { isRegistered: boolean }> {
     // 1. 인가 코드로 액세스 토큰 발급
     const tokenResponse = await this.googleOAuthService.getAccessToken(authorizationCode);
     
@@ -119,6 +124,9 @@ export class AuthService {
       where: {
         provider: 'google',
         providerId: userInfo.id.toString(),
+      },
+      include: {
+        member: true, // Member 관계 확인
       },
     });
 
@@ -136,6 +144,7 @@ export class AuthService {
         authUserId: existingAuthUser.id,
         provider: 'google',
         createdAt: existingAuthUser.createdAt.toISOString(),
+        isRegistered: !!existingAuthUser.member, // Member가 있으면 true
       };
     }
 
@@ -154,6 +163,7 @@ export class AuthService {
       authUserId: authUser.id,
       provider: authUser.provider,
       createdAt: authUser.createdAt.toISOString(),
+      isRegistered: false, // 새로 생성된 경우 항상 false
     };
   }
 
@@ -452,6 +462,29 @@ export class AuthService {
     // OAuth2 토큰은 AuthUser 테이블에 그대로 유지
     // (소셜 로그인 재사용을 위해)
     return;
+  }
+
+  /**
+   * AuthUser 조회 (member 포함)
+   */
+  async getAuthUserById(authUserId: UUID) {
+    const authUser = await this.prisma.authUser.findUnique({
+      where: { id: authUserId },
+      include: { member: true },
+    });
+
+    if (!authUser || !authUser.member || authUser.member.deletedAt) {
+      throw new NotFoundException('존재하지 않는 AuthUser 또는 회원가입 미완료');
+    }
+
+    return authUser;
+  }
+
+  /**
+   * JWT 토큰 생성 (public wrapper)
+   */
+  async generateTokensForMember(memberId: UUID, authUserId: UUID) {
+    return this.generateTokens(memberId, authUserId);
   }
 
   /**

@@ -4,19 +4,35 @@ import {
   ArgumentsHost,
   HttpException,
   HttpStatus,
+  Logger,
 } from '@nestjs/common';
-import { Response } from 'express';
+import { Response, Request } from 'express';
 
 /**
  * HTTP 예외를 API 스펙에 맞는 형식으로 변환하는 필터
  */
 @Catch(HttpException)
 export class HttpExceptionFilter implements ExceptionFilter {
+  private readonly logger = new Logger('HttpExceptionFilter');
+
   catch(exception: HttpException, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
+    const request = ctx.getRequest<Request>();
     const status = exception.getStatus();
     const exceptionResponse = exception.getResponse();
+
+    // 에러 로깅
+    this.logger.error(
+      `HTTP ${status} Error: ${request.method} ${request.url}`,
+      JSON.stringify({
+        status,
+        exceptionResponse,
+        body: request.body,
+        query: request.query,
+        params: request.params,
+      }),
+    );
 
     // 메시지 추출
     let message: string;

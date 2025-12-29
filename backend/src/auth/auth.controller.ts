@@ -187,7 +187,7 @@ export class AuthController {
 
   @Get('kakao/callback')
   @ApiOperation({ summary: '카카오 로그인 콜백' })
-  @ApiResponse({ status: 302, description: '테스트 페이지로 리다이렉트' })
+  @ApiResponse({ status: 302, description: '앱으로 리다이렉트' })
   async kakaoCallback(
     @Query('code') code: string,
     @Res() res: Response,
@@ -195,19 +195,29 @@ export class AuthController {
     try {
       const result = await this.authService.kakaoCallback(code);
       
-      // 테스트 페이지로 리다이렉트 (결과 포함)
-      const redirectUrl = `/oauth2-test.html?authUserId=${result.authUserId}&provider=${result.provider}&createdAt=${encodeURIComponent(result.createdAt)}`;
+      let redirectUrl: string;
+      
+      if (result.isRegistered) {
+        // 기존 회원 - JWT 토큰 발급해서 전달
+        const authUser = await this.authService.getAuthUserById(result.authUserId);
+        const tokens = await this.authService.generateTokensForMember(authUser.member!.id, result.authUserId);
+        redirectUrl = `histolook://kakao/callback?accessToken=${tokens.accessToken}&refreshToken=${tokens.refreshToken}&isRegistered=true`;
+      } else {
+        // 신규 회원 - authUserId 전달
+        redirectUrl = `histolook://kakao/callback?authUserId=${result.authUserId}&provider=${result.provider}&isRegistered=false&createdAt=${encodeURIComponent(result.createdAt)}`;
+      }
+      
       return res.redirect(redirectUrl);
     } catch (error) {
       // 에러 발생 시 에러 메시지와 함께 리다이렉트
       const errorMessage = error.message || '카카오 로그인 실패';
-      return res.redirect(`/oauth2-test.html?error=${encodeURIComponent(errorMessage)}`);
+      return res.redirect(`histolook://kakao/callback?error=${encodeURIComponent(errorMessage)}`);
     }
   }
 
   @Get('google/callback')
   @ApiOperation({ summary: '구글 로그인 콜백' })
-  @ApiResponse({ status: 302, description: '테스트 페이지로 리다이렉트' })
+  @ApiResponse({ status: 302, description: '앱으로 리다이렉트' })
   async googleCallback(
     @Query('code') code: string,
     @Res() res: Response,
@@ -215,13 +225,23 @@ export class AuthController {
     try {
       const result = await this.authService.googleCallback(code);
       
-      // 테스트 페이지로 리다이렉트 (결과 포함)
-      const redirectUrl = `/oauth2-test.html?authUserId=${result.authUserId}&provider=${result.provider}&createdAt=${encodeURIComponent(result.createdAt)}`;
+      let redirectUrl: string;
+      
+      if (result.isRegistered) {
+        // 기존 회원 - JWT 토큰 발급해서 전달
+        const authUser = await this.authService.getAuthUserById(result.authUserId);
+        const tokens = await this.authService.generateTokensForMember(authUser.member!.id, result.authUserId);
+        redirectUrl = `histolook://google/callback?accessToken=${tokens.accessToken}&refreshToken=${tokens.refreshToken}&isRegistered=true`;
+      } else {
+        // 신규 회원 - authUserId 전달
+        redirectUrl = `histolook://google/callback?authUserId=${result.authUserId}&provider=${result.provider}&isRegistered=false&createdAt=${encodeURIComponent(result.createdAt)}`;
+      }
+      
       return res.redirect(redirectUrl);
     } catch (error) {
       // 에러 발생 시 에러 메시지와 함께 리다이렉트
       const errorMessage = error.message || '구글 로그인 실패';
-      return res.redirect(`/oauth2-test.html?error=${encodeURIComponent(errorMessage)}`);
+      return res.redirect(`histolook://google/callback?error=${encodeURIComponent(errorMessage)}`);
     }
   }
 }

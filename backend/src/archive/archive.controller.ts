@@ -47,6 +47,12 @@ import {
   GetInterestArchivesResponseDto,
 } from './dto/get-interest-archives.dto';
 import { CreateInterestArchiveResponseDto } from './dto/create-interest-archive.dto';
+import {
+  GetFilteringQueryDto,
+  GetBrandsResponseDto,
+  GetTimelinesResponseDto,
+  GetCategoriesResponseDto,
+} from './dto/get-filters.dto';
 
 // TODO: Auth - 테스트용 고정 UUID (실제 인증 구현 시 제거)
 const TEST_USER_ID: UUID = '00000000-0000-0000-0000-000000000001';
@@ -70,6 +76,29 @@ export class ArchiveController {
       undefined, // TODO: Auth - user?.userId
     );
     return ApiResponseDto.success('홈화면 아카이브 리스트를 불러오는데 성공', result);
+  }
+
+  @Get('archive/filtering')
+  // TODO: Auth - @OptionalAuth()
+  @ApiOperation({ summary: '필터링 옵션 조회 (브랜드/타임라인/카테고리)' })
+  @ApiResponse({ status: 200, description: '성공' })
+  @ApiResponse({ status: 400, description: '잘못된 필터링 옵션' })
+  @ApiResponse({ status: 503, description: '일시적 오류로 필터링 옵션 조회 실패(재시도 요청)' })
+  async getFiltering(
+    @Query() query: GetFilteringQueryDto,
+  ): Promise<ApiResponseDto<GetBrandsResponseDto | GetTimelinesResponseDto | GetCategoriesResponseDto>> {
+    const result = await this.archiveService.getFiltering(query);
+    
+    let message = '';
+    if (query.name === 'brand') {
+      message = '필터링 브랜드 리스트 조회 성공';
+    } else if (query.name === 'timeline') {
+      message = '필터링 타임라인 리스트 조회 성공';
+    } else if (query.name === 'category') {
+      message = '필터링 카테고리 리스트 조회 성공';
+    }
+    
+    return ApiResponseDto.success(message, result);
   }
 
   @Get('archive/:archiveId')

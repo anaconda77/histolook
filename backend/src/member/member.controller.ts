@@ -35,7 +35,6 @@ export class MemberController {
   @ApiOperation({ summary: '프로필 조회' })
   @ApiResponse({ status: 200, description: '프로필 조회 성공' })
   @ApiResponse({ status: 401, description: '유효하지 않거나 만료된 토큰' })
-  @ApiResponse({ status: 404, description: '존재하지 않는 사용자' })
   async getProfile(
     @CurrentUser() user: CurrentUserData,
   ): Promise<ApiResponseDto<GetProfileResponseDto>> {
@@ -49,10 +48,10 @@ export class MemberController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: '프로필 수정' })
   @ApiResponse({ status: 204, description: '프로필 수정 성공' })
+  @ApiResponse({ status: 400, description: '닉네임 누락 혹은 유효 조건 위반' })
+  @ApiResponse({ status: 400, description: '관심 브랜드 누락 혹은 유효하지 않은 브랜드(혹은 개수 초과)' })
   @ApiResponse({ status: 401, description: '유효하지 않거나 만료된 토큰' })
   @ApiResponse({ status: 403, description: '이미 사용 중인 닉네임' })
-  @ApiResponse({ status: 404, description: '존재하지 않는 사용자' })
-  @ApiResponse({ status: 503, description: '일시적 오류로 프로필 수정 실패(재시도 요청)' })
   async updateProfile(
     @CurrentUser() user: CurrentUserData,
     @Body() dto: UpdateProfileDto,
@@ -88,8 +87,7 @@ export class MemberController {
   @ApiResponse({ status: 204, description: '회원 탈퇴 성공 / 관리자 삭제 완료' })
   @ApiResponse({ status: 400, description: '주요 필드 누락 (관리자 모드)' })
   @ApiResponse({ status: 401, description: '유효하지 않거나 만료된 토큰' })
-  @ApiResponse({ status: 404, description: '존재하지 않는 사용자 / 존재하지 않는 관리자' })
-  @ApiResponse({ status: 503, description: '일시적 오류로 회원 탈퇴 실패(재시도 요청)' })
+  @ApiResponse({ status: 404, description: '존재하지 않는 관리자 (관리자 모드)' })
   async secession(
     @Query('mode') mode: string | undefined,
     @Body() dto: SecessionDto | AdminSecessionDto,

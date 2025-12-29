@@ -37,6 +37,13 @@ import {
 } from './dto/get-interest-archives.dto';
 import { CreateInterestArchiveResponseDto } from './dto/create-interest-archive.dto';
 import { TimeUtil } from '../common/utils/time.util';
+import {
+  GetFilteringQueryDto,
+  GetBrandsResponseDto,
+  GetTimelinesResponseDto,
+  GetCategoriesResponseDto,
+  FilterItemDto,
+} from './dto/get-filters.dto';
 
 @Injectable()
 export class ArchiveService {
@@ -622,6 +629,49 @@ export class ArchiveService {
     }
 
     return category;
+  }
+
+  // 필터링 목록 조회 (통합)
+  async getFiltering(
+    query: GetFilteringQueryDto,
+  ): Promise<GetBrandsResponseDto | GetTimelinesResponseDto | GetCategoriesResponseDto> {
+    const { name } = query;
+
+    try {
+      if (name === 'brand') {
+        const brands = await this.prisma.brand.findMany({
+          orderBy: { name: 'asc' },
+          select: { name: true },
+        });
+
+        return {
+          brands: brands.map((brand) => ({ name: brand.name })),
+        };
+      } else if (name === 'timeline') {
+        const timelines = await this.prisma.timeline.findMany({
+          orderBy: { name: 'asc' },
+          select: { name: true },
+        });
+
+        return {
+          timelines: timelines.map((timeline) => ({ name: timeline.name })),
+        };
+      } else {
+        // name === 'category'
+        const categories = await this.prisma.category.findMany({
+          orderBy: { name: 'asc' },
+          select: { name: true },
+        });
+
+        return {
+          categories: categories.map((category) => ({ name: category.name })),
+        };
+      }
+    } catch (error) {
+      throw new ServiceTemporarilyUnavailableException(
+        '일시적 오류로 필터링 옵션 조회 실패(재시도 요청)',
+      );
+    }
   }
 
   private async updateAveragePrice(archiveId: UUID) {
