@@ -1,120 +1,113 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
+  provider     = "postgresql"
+  relationMode = "prisma"
 }
 
-// Brand model
 model Brand {
-  id         BigInt    @id @default(autoincrement())
-  name       String    @unique @db.VarChar(255)
-  krName     String?   @unique @map("kr_name") @db.VarChar(255)
-  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt  DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
-  
+  id        BigInt    @id @default(autoincrement())
+  name      String    @unique @db.VarChar(255)
+  krName    String?   @unique @map("kr_name") @db.VarChar(255)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+
   // Relations
-  archives   Archive[]
+  archives  Archive[]
 
   @@map("brand")
 }
 
-// Timeline model
 model Timeline {
-  id         BigInt    @id @default(autoincrement())
-  name       String    @db.VarChar(255)
-  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt  DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
-  
+  id        BigInt    @id @default(autoincrement())
+  name      String    @db.VarChar(255)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+
   // Relations
-  archives   Archive[]
+  archives  Archive[]
 
   @@map("timeline")
 }
 
-// Category model
 model Category {
-  id         BigInt    @id @default(autoincrement())
-  name       String    @db.VarChar(255)
-  krName     String    @map("kr_name") @db.VarChar(255)
-  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt  DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
-  
+  id        BigInt    @id @default(autoincrement())
+  name      String    @db.VarChar(255)
+  krName    String    @map("kr_name") @db.VarChar(255)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+
   // Relations
-  archives   Archive[]
+  archives  Archive[]
 
   @@map("category")
 }
 
-// Auth User model
 model AuthUser {
   id           String   @id @default(uuid()) @db.Uuid
   provider     String   @db.VarChar(255)
-  providerId   String   @map("provider_id") @db.Text
+  providerId   String   @map("provider_id")
   email        String?  @db.VarChar(255)
-  accessToken  String?  @map("access_token") @db.Text
-  refreshToken String?  @map("refresh_token") @db.Text
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
-  
+  accessToken  String?  @map("access_token")
+  refreshToken String?  @map("refresh_token")
+
   // Relations
-  member       Member?  @relation("AuthUserToMember")
+  member       Member?
 
   @@map("auth_user")
 }
 
-// Member model
 model Member {
-  id               String    @id @default(uuid()) @db.Uuid
-  nickname         String    @unique @db.VarChar(255)
-  role             String    @db.VarChar(255)
-  imageUrl         String?   @map("image_url") @db.VarChar(255)
-  brandInterests   String    @map("brand_interests") @db.VarChar(255)
-  secessionReason  String?   @map("secession_reason") @db.VarChar(255)
-  authUserId       String    @unique @map("auth_user_id") @db.Uuid
-  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
-  deletedAt        DateTime? @map("deleted_at") @db.Timestamptz(6)
-  
+  id              String             @id @default(uuid()) @db.Uuid
+  nickname        String             @unique @db.VarChar(255)
+  imageUrl        String?            @map("image_url") @db.VarChar(255)
+  brandInterests  String             @map("brand_interests") @db.VarChar(255)
+  secessionReason String?            @map("secession_reason") @db.VarChar(255)
+  createdAt       DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt       DateTime?          @map("deleted_at") @db.Timestamptz(6)
+  authUserId      String?            @unique @map("auth_user_id") @db.Uuid
+  role            String             @db.VarChar(255)
+
   // Relations
-  authUser         AuthUser? @relation("AuthUserToMember", fields: [authUserId], references: [id])
-  archives         Archive[]
+  authUser        AuthUser?          @relation(fields: [authUserId], references: [id])
+  archives        Archive[]          @relation("MemberArchives")
+  judgements      Judgement[]
   archiveInterests ArchiveInterest[]
-  judgements       Judgement[]
-  supportPosts     SupportPost[]
-  alarms           Alarm[]
+  supportPosts    SupportPost[]
+  deviceTokens    DeviceToken[]
 
   @@index([authUserId])
   @@map("member")
 }
 
-// Archive model
 model Archive {
-  id                     String    @id @default(uuid()) @db.Uuid
-  brandId                BigInt    @map("brand_id")
-  timelineId             BigInt    @map("timeline_id")
-  categoryId             BigInt    @map("category_id")
-  averageJudgementPrice  BigInt?   @map("average_judgement_price")
-  story                  String    @db.Text
-  imageUrls              String[]  @default([]) @map("image_urls")
-  isJudgementAllow       Boolean   @default(true) @map("is_judgement_allow")
-  isPriceJudgementAllow  Boolean   @default(false) @map("is_price_judgement_allow")
-  authorId               String    @map("author_id") @db.Uuid
-  createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt              DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
-  deletedAt              DateTime? @map("deleted_at") @db.Timestamptz(6)
-  
+  id                    String             @id @default(uuid()) @db.Uuid
+  brandId               BigInt             @map("brand_id")
+  timelineId            BigInt             @map("timeline_id")
+  categoryId            BigInt             @map("category_id")
+  averageJudgementPrice BigInt?            @map("average_judgement_price")
+  story                 String
+  authorId              String             @map("author_id") @db.Uuid
+  createdAt             DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt             DateTime?          @map("deleted_at") @db.Timestamptz(6)
+  imageUrls             String[]           @default([]) @map("image_urls")
+  isJudgementAllow      Boolean            @default(true) @map("is_judgement_allow")
+  isPriceJudgementAllow Boolean            @default(false) @map("is_price_judgement_allow")
+  judgementCnt          BigInt             @default(0) @map("judgement_cnt")
+
   // Relations
-  brand                  Brand     @relation(fields: [brandId], references: [id])
-  timeline               Timeline  @relation(fields: [timelineId], references: [id])
-  category               Category  @relation(fields: [categoryId], references: [id])
-  author                 Member    @relation(fields: [authorId], references: [id])
-  archiveInterests       ArchiveInterest[]
-  judgements             Judgement[]
+  brand                 Brand              @relation(fields: [brandId], references: [id])
+  timeline              Timeline           @relation(fields: [timelineId], references: [id])
+  category              Category           @relation(fields: [categoryId], references: [id])
+  author                Member             @relation("MemberArchives", fields: [authorId], references: [id])
+  judgements            Judgement[]
+  archiveInterests      ArchiveInterest[]
 
   @@index([brandId])
   @@index([timelineId])
@@ -123,75 +116,84 @@ model Archive {
   @@map("archive")
 }
 
-// Archive Interest model
 model ArchiveInterest {
-  id         String    @id @default(uuid()) @db.Uuid
-  archiveId  String    @map("archive_id") @db.Uuid
-  memberId   String    @map("member_id") @db.Uuid
-  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  deletedAt  DateTime? @map("deleted_at") @db.Timestamptz(6)
-  
+  id        String    @id @default(uuid()) @db.Uuid
+  archiveId String    @map("archive_id") @db.Uuid
+  memberId  String    @map("member_id") @db.Uuid
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
   // Relations
-  archive    Archive   @relation(fields: [archiveId], references: [id])
-  member     Member    @relation(fields: [memberId], references: [id])
+  archive   Archive   @relation(fields: [archiveId], references: [id])
+  member    Member    @relation(fields: [memberId], references: [id])
 
   @@index([archiveId])
   @@index([memberId])
   @@map("archive_interest")
 }
 
-// Judgement model
 model Judgement {
-  id         String    @id @default(uuid()) @db.Uuid
-  isArchive  Boolean   @map("is_archive")
-  comment    String?   @db.Text
-  price      BigInt?
-  memberId   String    @map("member_id") @db.Uuid
-  archiveId  String    @map("archive_id") @db.Uuid
-  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  
+  id        String   @id @default(uuid()) @db.Uuid
+  isArchive Boolean  @map("is_archive")
+  comment   String?
+  price     BigInt?
+  memberId  String   @map("member_id") @db.Uuid
+  archiveId String   @map("archive_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
   // Relations
-  member     Member    @relation(fields: [memberId], references: [id])
-  archive    Archive   @relation(fields: [archiveId], references: [id])
+  member    Member   @relation(fields: [memberId], references: [id])
+  archive   Archive  @relation(fields: [archiveId], references: [id])
 
   @@index([memberId])
   @@index([archiveId])
   @@map("judgement")
 }
 
-// Support Post model
 model SupportPost {
-  id           BigInt   @id @default(autoincrement())
-  title        String   @db.VarChar(255)
-  supportType  String   @map("support_type") @db.VarChar(255)
-  content      String   @db.Text
-  status       String   @default("대기중") @db.VarChar(50)
-  reply        String?  @db.Text
-  memberId     String   @map("member_id") @db.Uuid
-  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  
+  id          BigInt   @id @default(autoincrement())
+  title       String   @db.VarChar(255)
+  supportType String   @map("support_type") @db.VarChar(255)
+  content     String
+  memberId    String   @map("member_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  status      String   @default("대기중") @db.VarChar(50)
+  reply       String?
+
   // Relations
-  member       Member   @relation(fields: [memberId], references: [id])
+  member      Member   @relation(fields: [memberId], references: [id])
 
   @@index([memberId])
   @@map("support_post")
 }
 
-// Alarm model
 model Alarm {
   id           String   @id @default(uuid()) @db.Uuid
-  title        String   @db.VarChar(255)
   alarmType    String   @map("alarm_type") @db.VarChar(255)
-  content      String   @db.Text
-  imageUrl     String?  @map("image_url") @db.VarChar(500)
-  resourcePath String?  @map("resource_path") @db.VarChar(500)
+  content      String
   isGlobal     Boolean  @map("is_global")
   memberId     String?  @map("member_id") @db.Uuid
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  
-  // Relations
-  member       Member?  @relation(fields: [memberId], references: [id])
+  title        String   @default("") @db.VarChar(255)
+  imageUrl     String?  @map("image_url") @db.VarChar(500)
+  resourcePath String?  @map("resource_path") @db.VarChar(500)
 
   @@index([memberId])
   @@map("alarm")
+}
+
+model DeviceToken {
+  id                  String   @id @default(uuid()) @db.Uuid
+  token               String   @unique
+  deviceId            String?  @map("device_id") @db.VarChar(255)
+  platform            String   @db.VarChar(50)
+  memberId            String   @map("member_id") @db.Uuid
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  notificationEnabled Boolean  @default(true) @map("notification_enabled")
+  member              Member   @relation(fields: [memberId], references: [id])
+
+  @@index([memberId])
+  @@index([token])
+  @@map("device_token")
 }

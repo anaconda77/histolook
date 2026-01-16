@@ -11,13 +11,15 @@ import {
   HttpStatus,
   UseGuards,
 } from '@nestjs/common';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { ArchiveService } from './archive.service';
+import { StorageService } from './storage.service';
 import { ApiResponseDto } from '../common/dto/api-response.dto';
 import type { UUID } from '../common/types/uuid.type';
-// import { CurrentUser } from '../common/decorators/current-user.decorator';
-// import type { CurrentUserData } from '../common/decorators/current-user.decorator';
-// import { OptionalAuth } from '../common/decorators/optional-auth.decorator';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import type { CurrentUserData } from '../common/decorators/current-user.decorator';
+import { OptionalAuth } from '../common/decorators/optional-auth.decorator';
 // import { ApiBearerAuth } from '@nestjs/swagger';
 import { UuidValidationPipe } from '../common/pipes/uuid-validation.pipe';
 import {
@@ -42,6 +44,7 @@ import {
   GetCommentsQueryDto,
   GetCommentsResponseDto,
 } from './dto/get-comments.dto';
+import { GetArchiveCommentsResponseDto } from './dto/get-archive-comments.dto';
 import {
   GetInterestArchivesQueryDto,
   GetInterestArchivesResponseDto,
@@ -53,6 +56,10 @@ import {
   GetTimelinesResponseDto,
   GetCategoriesResponseDto,
 } from './dto/get-filters.dto';
+import {
+  GeneratePresignedUrlDto,
+  GeneratePresignedUrlResponseDto,
+} from './dto/generate-presigned-url.dto';
 
 // TODO: Auth - 테스트용 고정 UUID (실제 인증 구현 시 제거)
 const TEST_USER_ID: UUID = '00000000-0000-0000-0000-000000000001';
@@ -60,20 +67,24 @@ const TEST_USER_ID: UUID = '00000000-0000-0000-0000-000000000001';
 @ApiTags('Archive')
 @Controller('api/v1')
 export class ArchiveController {
-  constructor(private readonly archiveService: ArchiveService) {}
+  constructor(
+    private readonly archiveService: ArchiveService,
+    private readonly storageService: StorageService,
+  ) {}
 
   @Get('archive')
-  // TODO: Auth - @OptionalAuth()
+  @UseGuards(JwtAuthGuard)
+  @OptionalAuth()
   @ApiOperation({ summary: '홈화면 아카이브 리스트 조회' })
   @ApiResponse({ status: 200, description: '성공' })
   @ApiResponse({ status: 400, description: '올바르지 않은 필터링 파라미터 조건 또는 유효하지 않은 페이지 넘버' })
   async getArchives(
     @Query() query: GetArchivesQueryDto,
-    // TODO: Auth - @CurrentUser() user: CurrentUserData | null,
+    @CurrentUser() user: CurrentUserData | null,
   ): Promise<ApiResponseDto<GetArchivesResponseDto>> {
     const result = await this.archiveService.getArchives(
       query,
-      undefined, // TODO: Auth - user?.userId
+      user?.userId,
     );
     return ApiResponseDto.success('홈화면 아카이브 리스트를 불러오는데 성공', result);
   }
@@ -101,103 +112,124 @@ export class ArchiveController {
     return ApiResponseDto.success(message, result);
   }
 
+  @Get('my/archive')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: '내 아카이브 리스트 조회 (임시: 테스트 사용자)' })
+  @ApiResponse({ status: 200, description: '성공' })
+  @ApiResponse({ status: 400, description: '올바르지 않은 필터링 파라미터 조건 또는 유효하지 않은 페이지 넘버' })
+  @ApiResponse({ status: 401, description: '인증 실패: 토큰 필요 또는 유효하지 않은 토큰' })
+  async getMyArchives(
+    @Query() query: GetMyArchivesQueryDto,
+    @CurrentUser() user: CurrentUserData,
+  ): Promise<ApiResponseDto<GetMyArchivesResponseDto>> {
+    const result = await this.archiveService.getMyArchives(
+      user.userId,
+      query,
+    );
+    return ApiResponseDto.success('내 아카이브 리스트를 불러오는데 성공', result);
+  }
+
   @Get('archive/:archiveId')
-  // TODO: Auth - @OptionalAuth()
+  @UseGuards(JwtAuthGuard)
+  @OptionalAuth()
   @ApiOperation({ summary: '아카이브 상세 조회' })
   @ApiResponse({ status: 200, description: '성공' })
   @ApiResponse({ status: 400, description: '아카이브 id가 uuid 형식이 아님' })
   @ApiResponse({ status: 404, description: '존재하지 않는 아카이브 id' })
   async getArchiveDetail(
     @Param('archiveId', UuidValidationPipe) archiveId: UUID,
-    // TODO: Auth - @CurrentUser() user: CurrentUserData | null,
+    @CurrentUser() user: CurrentUserData | null,
   ): Promise<ApiResponseDto<GetArchiveDetailResponseDto>> {
     const result = await this.archiveService.getArchiveDetail(
       archiveId,
-      undefined, // TODO: Auth - user?.userId
+      user?.userId,
     );
     return ApiResponseDto.success('아카이브 상세 화면을 불러오는데 성공', result);
   }
 
-  @Get('my/archive')
-  // TODO: Auth - @ApiBearerAuth()
-  @ApiOperation({ summary: '내 아카이브 리스트 조회 (임시: 테스트 사용자)' })
-  @ApiResponse({ status: 200, description: '성공' })
-  // TODO: Auth - @ApiResponse({ status: 401, description: '인증 실패: 토큰 필요 또는 유효하지 않은 토큰' })
-  async getMyArchives(
-    @Query() query: GetMyArchivesQueryDto,
-    // TODO: Auth - @CurrentUser() user: CurrentUserData,
-  ): Promise<ApiResponseDto<GetMyArchivesResponseDto>> {
-    const result = await this.archiveService.getMyArchives(
-      TEST_USER_ID, // TODO: Auth - Replace with user.userId
-      query,
+  @Post('archive/upload-urls')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: '이미지 업로드용 Presigned URL 생성' })
+  @ApiResponse({ status: 200, description: 'Presigned URL 생성 성공' })
+  @ApiResponse({ status: 401, description: '인증 실패: 토큰 필요 또는 유효하지 않은 토큰' })
+  async generatePresignedUrls(
+    @Body() dto: GeneratePresignedUrlDto,
+    @CurrentUser() user: CurrentUserData,
+  ): Promise<ApiResponseDto<GeneratePresignedUrlResponseDto>> {
+    const result = await this.storageService.generatePresignedUploadUrls(
+      user.userId,
+      dto.fileCount,
+      dto.expiresInMinutes || 15,
     );
-    return ApiResponseDto.success('내 아카이브 리스트를 불러오는데 성공', result);
+    return ApiResponseDto.success('Presigned URL 생성 성공', result);
   }
 
   @Post('archive')
-  // TODO: Auth - @ApiBearerAuth()
-  @ApiOperation({ summary: '아카이브 등록 (임시: 테스트 사용자)' })
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: '아카이브 등록' })
   @ApiResponse({ status: 201, description: '생성 성공' })
-  // TODO: Auth - @ApiResponse({ status: 401, description: '인증 실패: 토큰 필요 또는 유효하지 않은 토큰' })
+  @ApiResponse({ status: 401, description: '인증 실패: 토큰 필요 또는 유효하지 않은 토큰' })
   @ApiResponse({ status: 503, description: '일시적 오류로 아카이브 등록 실패(재시도 요청)' })
   async createArchive(
     @Body() dto: CreateArchiveDto,
-    // TODO: Auth - @CurrentUser() user: CurrentUserData,
+    @CurrentUser() user: CurrentUserData,
   ): Promise<ApiResponseDto<CreateArchiveResponseDto>> {
-    const result = await this.archiveService.createArchive(TEST_USER_ID, dto); // TODO: Auth - Replace with user.userId
+    const result = await this.archiveService.createArchive(user.userId, dto);
     return ApiResponseDto.created('아카이브가 성공적으로 생성됨', result);
   }
 
   @Put('archive/:archiveId')
+  @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.NO_CONTENT)
-  // TODO: Auth - @ApiBearerAuth()
-  @ApiOperation({ summary: '아카이브 수정 (임시: 테스트 사용자)' })
+  @ApiOperation({ summary: '아카이브 수정' })
   @ApiResponse({ status: 204, description: '수정 성공' })
   @ApiResponse({ status: 400, description: '아카이브 id가 uuid 형식이 아님' })
-  // TODO: Auth - @ApiResponse({ status: 401, description: '인증 실패' })
+  @ApiResponse({ status: 401, description: '인증 실패: 토큰 필요 또는 유효하지 않은 토큰' })
+  @ApiResponse({ status: 403, description: '아카이브를 수정할 권한이 없습니다' })
   @ApiResponse({ status: 404, description: '존재하지 않는 아카이브 id' })
   @ApiResponse({ status: 503, description: '일시적 오류로 아카이브 수정 실패(재시도 요청)' })
   async updateArchive(
     @Param('archiveId', UuidValidationPipe) archiveId: UUID,
     @Body() dto: UpdateArchiveDto,
-    // TODO: Auth - @CurrentUser() user: CurrentUserData,
+    @CurrentUser() user: CurrentUserData,
   ): Promise<ApiResponseDto<Record<string, never>>> {
-    await this.archiveService.updateArchive(TEST_USER_ID, archiveId, dto); // TODO: Auth - Replace with user.userId
+    await this.archiveService.updateArchive(user.userId, archiveId, dto);
     return ApiResponseDto.noContent('아카이브가 성공적으로 수정됨');
   }
 
   @Delete('archive/:archiveId')
+  @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.NO_CONTENT)
-  // TODO: Auth - @ApiBearerAuth()
-  @ApiOperation({ summary: '아카이브 삭제 (임시: 테스트 사용자)' })
+  @ApiOperation({ summary: '아카이브 삭제' })
   @ApiResponse({ status: 204, description: '삭제 성공' })
   @ApiResponse({ status: 400, description: '아카이브 id가 uuid 형식이 아님' })
-  // TODO: Auth - @ApiResponse({ status: 401, description: '인증 실패' })
+  @ApiResponse({ status: 401, description: '인증 실패' })
+  @ApiResponse({ status: 403, description: '권한 없음 (작성자가 아님)' })
   @ApiResponse({ status: 404, description: '존재하지 않는 아카이브 id' })
   @ApiResponse({ status: 503, description: '일시적 오류로 아카이브 삭제 실패(재시도 요청)' })
   async deleteArchive(
     @Param('archiveId', UuidValidationPipe) archiveId: UUID,
-    // TODO: Auth - @CurrentUser() user: CurrentUserData,
+    @CurrentUser() user: CurrentUserData,
   ): Promise<ApiResponseDto<Record<string, never>>> {
-    await this.archiveService.deleteArchive(TEST_USER_ID, archiveId); // TODO: Auth - Replace with user.userId
+    await this.archiveService.deleteArchive(user.userId, archiveId);
     return ApiResponseDto.noContent('아카이브가 성공적으로 삭제됨');
   }
 
   @Post('archive/:archiveId/judgement')
-  // TODO: Auth - @ApiBearerAuth()
-  @ApiOperation({ summary: '아카이브 판정 등록 (임시: 테스트 사용자)' })
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: '아카이브 판정 등록' })
   @ApiResponse({ status: 201, description: '생성 성공' })
   @ApiResponse({ status: 400, description: '아카이브 id가 uuid 형식이 아님' })
-  // TODO: Auth - @ApiResponse({ status: 401, description: '인증 실패' })
+  @ApiResponse({ status: 401, description: '인증 실패' })
   @ApiResponse({ status: 404, description: '존재하지 않는 아카이브 id' })
   @ApiResponse({ status: 503, description: '일시적 오류로 아카이브 판정 등록 실패(재시도 요청)' })
   async createJudgement(
     @Param('archiveId', UuidValidationPipe) archiveId: UUID,
     @Body() dto: CreateJudgementDto,
-    // TODO: Auth - @CurrentUser() user: CurrentUserData,
+    @CurrentUser() user: CurrentUserData,
   ): Promise<ApiResponseDto<CreateJudgementResponseDto>> {
     const result = await this.archiveService.createJudgement(
-      TEST_USER_ID, // TODO: Auth - Replace with user.userId
+      user.userId,
       archiveId,
       dto,
     );
@@ -216,6 +248,19 @@ export class ArchiveController {
   ): Promise<ApiResponseDto<GetCommentsResponseDto>> {
     const result = await this.archiveService.getComments(TEST_USER_ID, query); // TODO: Auth - Replace with user.userId
     return ApiResponseDto.success('판정 코멘트 리스트를 불러오는데 성공', result);
+  }
+
+  @Get('archive/:archiveId/comments')
+  // TODO: Auth - @OptionalAuth()
+  @ApiOperation({ summary: '특정 아카이브의 판정 코멘트 리스트 조회' })
+  @ApiResponse({ status: 200, description: '성공' })
+  @ApiResponse({ status: 400, description: '아카이브 id가 uuid 형식이 아님' })
+  @ApiResponse({ status: 404, description: '존재하지 않는 아카이브 id' })
+  async getArchiveComments(
+    @Param('archiveId', UuidValidationPipe) archiveId: UUID,
+  ): Promise<ApiResponseDto<GetArchiveCommentsResponseDto>> {
+    const result = await this.archiveService.getArchiveComments(archiveId);
+    return ApiResponseDto.success('아카이브 코멘트 리스트를 불러오는데 성공', result);
   }
 
   @Get('interest/archive')

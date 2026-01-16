@@ -25,5 +25,14 @@ export class LoginResponseDto {
 
   @ApiProperty({ required: false })
   authUserId?: string;
+
+  @ApiProperty({ required: false, description: '회원 ID (로그인 성공 시)' })
+  memberId?: string;
+
+  @ApiProperty({ required: false, description: '닉네임 (로그인 성공 시)' })
+  nickname?: string;
+
+  @ApiProperty({ required: false, description: '역할 (로그인 성공 시)' })
+  role?: string;
 }
 

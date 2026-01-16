@@ -5,20 +5,20 @@ import {
   Delete,
   Body,
   Query,
-  Req,
+  Param,
   UseGuards,
   HttpCode,
   HttpStatus,
   UnauthorizedException,
 } from '@nestjs/common';
-import type { Request } from 'express';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody, ApiExtraModels, ApiQuery, getSchemaPath } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody, ApiExtraModels, ApiQuery, ApiParam, getSchemaPath } from '@nestjs/swagger';
 import { MemberService } from './member.service';
 import { ApiResponseDto } from '../common/dto/api-response.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { OptionalAdminGuard } from './guards/optional-admin-guard';
+import { OptionalAuth } from '../common/decorators/optional-auth.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { CurrentUserData } from '../common/decorators/current-user.decorator';
+import type { UUID } from '../common/types/uuid.type';
 import { GetProfileResponseDto } from './dto/get-profile.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { SecessionDto } from './dto/secession.dto';
@@ -29,16 +29,18 @@ import { AdminSecessionDto } from './dto/admin-secession.dto';
 export class MemberController {
   constructor(private readonly memberService: MemberService) {}
 
-  @Get('profile')
+  @Get(':memberId')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: '프로필 조회' })
+  @ApiOperation({ summary: '프로필 조회 (memberId로)' })
+  @ApiParam({ name: 'memberId', description: '회원 ID', type: 'string', format: 'uuid' })
   @ApiResponse({ status: 200, description: '프로필 조회 성공' })
   @ApiResponse({ status: 401, description: '유효하지 않거나 만료된 토큰' })
-  async getProfile(
-    @CurrentUser() user: CurrentUserData,
+  @ApiResponse({ status: 404, description: '존재하지 않는 사용자' })
+  async getProfileById(
+    @Param('memberId') memberId: UUID,
   ): Promise<ApiResponseDto<GetProfileResponseDto>> {
-    const result = await this.memberService.getProfile(user.userId);
+    const result = await this.memberService.getProfile(memberId);
     return ApiResponseDto.success('프로필 조회 성공', result);
   }
 
@@ -61,7 +63,9 @@ export class MemberController {
   }
 
   @Delete('secession')
-  @UseGuards(OptionalAdminGuard)
+  @UseGuards(JwtAuthGuard)
+  @OptionalAuth()
+  @ApiBearerAuth()
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ 
     summary: '회원 탈퇴 / 관리자 삭제',
@@ -91,17 +95,15 @@ export class MemberController {
   async secession(
     @Query('mode') mode: string | undefined,
     @Body() dto: SecessionDto | AdminSecessionDto,
-    @Req() req: Request,
+    @CurrentUser() user: CurrentUserData | null,
   ): Promise<ApiResponseDto<Record<string, never>>> {
-    // 관리자 삭제 모드
+    // 관리자 삭제 모드 (인증 불필요)
     if (mode === 'admin') {
       await this.memberService.secessionAdmin(dto as AdminSecessionDto);
       return ApiResponseDto.noContent('관리자 삭제 완료');
     }
 
     // 일반 회원 탈퇴 (인증 필요)
-    const user = req.user as CurrentUserData | undefined;
-
     if (!user || !user.userId) {
       throw new UnauthorizedException('유효하지 않거나 만료된 토큰');
     }

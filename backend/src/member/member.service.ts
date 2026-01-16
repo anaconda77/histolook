@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { StorageService } from '../archive/storage.service';
 import type { UUID } from '../common/types/uuid.type';
 import { GetProfileResponseDto } from './dto/get-profile.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
@@ -8,7 +9,10 @@ import { AdminSecessionDto } from './dto/admin-secession.dto';
 
 @Injectable()
 export class MemberService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private storageService: StorageService,
+  ) {}
 
   /**
    * 7. 프로필 조회
@@ -81,8 +85,15 @@ export class MemberService {
       updateData.nickname = dto.nickname;
     }
     
-    if (dto.imageUrl !== undefined) {
-      updateData.imageUrl = dto.imageUrl;
+    // imageObjectName을 publicUrl로 변환 (보안: 백엔드에서만 변환)
+    if (dto.imageObjectName !== undefined) {
+      if (dto.imageObjectName === null || dto.imageObjectName === '') {
+        // 기본 이미지로 변경 (null)
+        updateData.imageUrl = null;
+      } else {
+        // objectName을 publicUrl로 변환
+        updateData.imageUrl = this.storageService.getPublicUrlFromObjectName(dto.imageObjectName);
+      }
     }
     
     if (dto.brandInterests !== undefined) {
@@ -107,21 +118,25 @@ export class MemberService {
       throw new NotFoundException('존재하지 않는 사용자');
     }
 
-    // Soft delete
+    // DeviceToken 삭제 (회원 탈퇴 시 모든 디바이스 토큰 제거)
+    await this.prisma.deviceToken.deleteMany({
+      where: { memberId: userId },
+    });
+
+    // AuthUser 삭제 (재가입을 위해 즉시 삭제)
+    if (member.authUserId) {
+      await this.prisma.authUser.delete({
+        where: { id: member.authUserId },
+      });
+    }
+
+    // Member Soft delete 및 authUserId null 처리
     await this.prisma.member.update({
       where: { id: userId },
       data: {
         deletedAt: new Date(),
         secessionReason: dto.reason,
-      },
-    });
-
-    // OAuth2 소셜 로그인 토큰 무효화
-    await this.prisma.authUser.update({
-      where: { id: member.authUserId },
-      data: {
-        accessToken: null,
-        refreshToken: null,
+        authUserId: null, // AuthUser 삭제 후 null로 설정
       },
     });
 
@@ -148,18 +163,26 @@ export class MemberService {
       throw new NotFoundException('존재하지 않는 관리자');
     }
 
-    // Soft delete
+    // DeviceToken 삭제 (관리자 삭제 시 모든 디바이스 토큰 제거)
+    await this.prisma.deviceToken.deleteMany({
+      where: { memberId: dto.memberId },
+    });
+
+    // AuthUser 삭제
+    if (member.authUserId) {
+      await this.prisma.authUser.delete({
+        where: { id: member.authUserId },
+      });
+    }
+
+    // Member Soft delete 및 authUserId null 처리
     await this.prisma.member.update({
       where: { id: dto.memberId },
       data: {
         deletedAt: new Date(),
         secessionReason: '관리자 삭제',
+        authUserId: null, // AuthUser 삭제 후 null로 설정
       },
-    });
-
-    // AuthUser도 삭제
-    await this.prisma.authUser.delete({
-      where: { id: member.authUserId },
     });
   }
 }

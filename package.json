@@ -1,0 +1,9 @@
+{
+  "dependencies": {
+    "oci-common": "^2.122.2",
+    "oci-objectstorage": "^2.122.2"
+  },
+  "devDependencies": {
+    "@types/multer": "^2.0.0"
+  }
+}

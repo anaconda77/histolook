@@ -7,6 +7,7 @@ import { AuthModule } from './auth/auth.module';
 import { MemberModule } from './member/member.module';
 import { AlarmModule } from './alarm/alarm.module';
 import { SupportModule } from './support/support.module';
+import { FcmModule } from './fcm/fcm.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { SupportModule } from './support/support.module';
     MemberModule,
     AlarmModule,
     SupportModule,
+    FcmModule,
   ],
   controllers: [AppController],
   providers: [AppService],

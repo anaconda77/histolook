@@ -27,10 +27,10 @@ export class UpdateArchiveDto {
   @ValidateIf((o) => o.isJudgementAllow === true)
   isPriceJudgementAllow: boolean;
 
-  @ApiPropertyOptional({ description: '이미지 URL 배열', type: [String] })
+  @ApiPropertyOptional({ description: '이미지 Object Name 배열 (Presigned URL로 업로드 후 받은 식별자)', type: [String] })
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
-  imageUrls?: string[];
+  imageObjectNames?: string[];
 }
 

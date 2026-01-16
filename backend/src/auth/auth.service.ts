@@ -82,11 +82,14 @@ export class AuthService {
         },
       });
 
+      // Member가 있고 탈퇴하지 않은 경우만 isRegistered: true
+      const isRegistered = !!(existingAuthUser.member && !existingAuthUser.member.deletedAt);
+
       return {
         authUserId: existingAuthUser.id,
         provider: 'kakao',
         createdAt: existingAuthUser.createdAt.toISOString(),
-        isRegistered: !!existingAuthUser.member, // Member가 있으면 true
+        isRegistered,
       };
     }
 
@@ -140,11 +143,14 @@ export class AuthService {
         },
       });
 
+      // Member가 있고 탈퇴하지 않은 경우만 isRegistered: true
+      const isRegistered = !!(existingAuthUser.member && !existingAuthUser.member.deletedAt);
+
       return {
         authUserId: existingAuthUser.id,
         provider: 'google',
         createdAt: existingAuthUser.createdAt.toISOString(),
-        isRegistered: !!existingAuthUser.member, // Member가 있으면 true
+        isRegistered,
       };
     }
 
@@ -283,7 +289,7 @@ export class AuthService {
       role: member.role,
       imageUrl: member.imageUrl,
       brandInterests: dto.brandInterests,
-      authUserId: member.authUserId,
+      authUserId: authUser.id, // authUser에서 직접 가져오기
       createdAt: member.createdAt.toISOString(),
     };
   }
@@ -346,7 +352,7 @@ export class AuthService {
       where: { id: dto.memberId },
     });
 
-    if (!member || member.deletedAt) {
+    if (!member || member.deletedAt || !member.authUserId) {
       throw new NotFoundException('존재하지 않는 authUser');
     }
 
@@ -412,6 +418,9 @@ export class AuthService {
         isRegistered: true,
         accessToken: tokens.accessToken,
         refreshToken: tokens.refreshToken,
+        memberId: authUser.member.id,
+        nickname: authUser.member.nickname,
+        role: authUser.member.role,
       };
     } catch (error) {
       if (error instanceof InvalidSocialTokenException) {

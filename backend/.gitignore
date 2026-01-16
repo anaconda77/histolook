@@ -3,3 +3,12 @@ node_modules
 .env
 
 /generated/prisma
+
+# OCI 인증 파일 (보안)
+.oci/
+~/.oci/
+
+# Firebase 서비스 계정 키 (보안)
+firebase-service-account.json
+*firebase*.json
+!package*.json

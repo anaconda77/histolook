@@ -50,6 +50,9 @@ export class GetArchiveDetailResponseDto {
   @ApiProperty()
   isJudged: boolean;
 
+  @ApiPropertyOptional()
+  isInterest?: boolean; // 관심 아카이브 여부
+
   @ApiPropertyOptional({ type: MyJudgementDto })
   myJudgement?: MyJudgementDto | null;
 

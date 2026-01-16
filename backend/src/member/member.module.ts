@@ -1,20 +1,16 @@
 import { Module } from '@nestjs/common';
-import { JwtModule } from '@nestjs/jwt';
 import { MemberController } from './member.controller';
 import { MemberService } from './member.service';
 import { PrismaModule } from '../prisma/prisma.module';
-import { OptionalAdminGuard } from './guards/optional-admin-guard';
+import { ArchiveModule } from '../archive/archive.module';
 
 @Module({
   imports: [
     PrismaModule,
-    JwtModule.register({
-      secret: process.env.JWT_SECRET || 'your-secret-key',
-      signOptions: { expiresIn: '1d' },
-    }),
+    ArchiveModule, // StorageService를 사용하기 위해 추가
   ],
   controllers: [MemberController],
-  providers: [MemberService, OptionalAdminGuard],
+  providers: [MemberService],
   exports: [MemberService],
 })
 export class MemberModule {}

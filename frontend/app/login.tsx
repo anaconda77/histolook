@@ -5,6 +5,7 @@ import * as WebBrowser from 'expo-web-browser';
 import { GoogleLoginButton } from '@/components/google-login-button';
 import { authAPI } from '@/services/auth.api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { registerForPushNotificationsAsync } from '@/utils/fcm';
 
 // WebBrowser 세션 완료 후 처리
 WebBrowser.maybeCompleteAuthSession();
@@ -97,10 +98,32 @@ export default function LoginScreen() {
         }
 
         if (isRegistered === 'true' && accessToken && refreshToken) {
-          // 기존 회원 - 토큰 저장 후 홈으로 이동
+          // 기존 회원 - 토큰 및 사용자 정보 저장 후 홈으로 이동
           try {
+            const memberId = url.searchParams.get('memberId');
+            const nickname = url.searchParams.get('nickname');
+            const role = url.searchParams.get('role');
+
             await AsyncStorage.setItem('accessToken', accessToken);
             await AsyncStorage.setItem('refreshToken', refreshToken);
+            
+            if (memberId) {
+              await AsyncStorage.setItem('memberId', memberId);
+            }
+            if (nickname) {
+              await AsyncStorage.setItem('nickname', decodeURIComponent(nickname));
+            }
+            if (role) {
+              await AsyncStorage.setItem('role', role);
+            }
+            
+            // FCM 토큰 등록 (로그인 성공 후)
+            try {
+              await registerForPushNotificationsAsync();
+            } catch (error) {
+              console.error('FCM 토큰 등록 실패:', error);
+              // 토큰 등록 실패해도 로그인은 계속 진행
+            }
             
             // 홈 화면으로 이동
             router.replace('/(tabs)');
@@ -152,10 +175,32 @@ export default function LoginScreen() {
         }
 
         if (isRegistered === 'true' && accessToken && refreshToken) {
-          // 기존 회원 - 토큰 저장 후 홈으로 이동
+          // 기존 회원 - 토큰 및 사용자 정보 저장 후 홈으로 이동
           try {
+            const memberId = url.searchParams.get('memberId');
+            const nickname = url.searchParams.get('nickname');
+            const role = url.searchParams.get('role');
+
             await AsyncStorage.setItem('accessToken', accessToken);
             await AsyncStorage.setItem('refreshToken', refreshToken);
+            
+            if (memberId) {
+              await AsyncStorage.setItem('memberId', memberId);
+            }
+            if (nickname) {
+              await AsyncStorage.setItem('nickname', decodeURIComponent(nickname));
+            }
+            if (role) {
+              await AsyncStorage.setItem('role', role);
+            }
+            
+            // FCM 토큰 등록 (로그인 성공 후)
+            try {
+              await registerForPushNotificationsAsync();
+            } catch (error) {
+              console.error('FCM 토큰 등록 실패:', error);
+              // 토큰 등록 실패해도 로그인은 계속 진행
+            }
             
             // 홈 화면으로 이동
             router.replace('/(tabs)');
@@ -202,10 +247,10 @@ export default function LoginScreen() {
         </View>
 
         {/* 로고 텍스트 */}
-        <Text className="text-[52px] font-bold" style={{ lineHeight: 58, color: '#2F2F2F' }}>
+        <Text className="text-[52px] font-bold" style={{ lineHeight: 58, color: '#2F2F2F', fontFamily: 'Righteous' }}>
           Histo
         </Text>
-        <Text className="text-[52px] font-bold mb-4" style={{ lineHeight: 58, color: '#2F2F2F' }}>
+        <Text className="text-[52px] font-bold mb-4" style={{ lineHeight: 58, color: '#2F2F2F', fontFamily: 'Righteous' }}>
           Look
         </Text>
         

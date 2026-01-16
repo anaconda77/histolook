@@ -111,6 +111,11 @@ export class SupportService {
 
       const supportDetail: SupportDetailDto = {
         supportPostId: support.id.toString(),
+        title: support.title,
+        supportType: support.supportType,
+        content: support.content,
+        status: support.status,
+        createdAt: support.createdAt.toISOString(),
         reply: support.reply,
       };
 

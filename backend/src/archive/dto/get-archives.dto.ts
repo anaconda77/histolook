@@ -35,6 +35,9 @@ export class ArchiveItemDto {
 
   @ApiProperty()
   isInterest: boolean;
+
+  @ApiProperty({ description: '작성자 ID' })
+  authorId: string;
 }
 
 export class GetArchivesResponseDto {

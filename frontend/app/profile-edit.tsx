@@ -11,8 +11,9 @@ import {
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Search, X } from 'lucide-react-native';
+import { ArrowLeft, Search, X, Camera } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as ImagePicker from 'expo-image-picker';
 import { memberAPI } from '@/services/member.api';
 import { authAPI } from '@/services/auth.api';
 import { archiveAPI } from '@/services/archive.api';
@@ -28,6 +29,8 @@ export default function ProfileEditScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [currentProfile, setCurrentProfile] = useState<any>(null);
   const [allBrands, setAllBrands] = useState<string[]>([]);
+  const [profileImage, setProfileImage] = useState<string | null>(null); // 선택된 이미지 URI
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
 
   const filteredBrands = allBrands.filter(
     (brand) =>
@@ -37,7 +40,15 @@ export default function ProfileEditScreen() {
 
   useEffect(() => {
     loadProfileAndBrands();
+    requestImagePermission();
   }, []);
+
+  const requestImagePermission = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('권한 필요', '프로필 이미지를 변경하려면 갤러리 접근 권한이 필요합니다.');
+    }
+  };
 
   const loadProfileAndBrands = async () => {
     try {
@@ -57,12 +68,22 @@ export default function ProfileEditScreen() {
       setCurrentProfile(profile);
       setNickname(profile.nickname);
       setSelectedBrands(profile.brandInterests || []);
+      setProfileImage(profile.imageUrl || null); // 기존 프로필 이미지 설정
       setIsNicknameChecked(true); // 기존 닉네임은 이미 확인된 것으로 간주
       setAllBrands(brands.sort((a, b) => a.localeCompare(b))); // ABC 순 정렬
     } catch (error) {
       console.error('프로필 로딩 실패:', error);
-      Alert.alert('오류', '프로필을 불러올 수 없습니다.');
-      router.back();
+      setIsLoading(false);
+      Alert.alert(
+        '오류',
+        '페이지 로드하는데 실패했습니다.',
+        [
+          {
+            text: '확인',
+            onPress: () => router.back()
+          }
+        ]
+      );
     } finally {
       setIsLoading(false);
     }
@@ -153,6 +174,28 @@ export default function ProfileEditScreen() {
     setSelectedBrands(selectedBrands.filter((b) => b !== brand));
   };
 
+  const pickImage = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setProfileImage(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('이미지 선택 실패:', error);
+      Alert.alert('오류', '이미지를 선택할 수 없습니다.');
+    }
+  };
+
+  const useDefaultImage = () => {
+    setProfileImage(null);
+  };
+
   const handleSave = async () => {
     if (!isNicknameChecked) {
       Alert.alert('알림', '닉네임 중복 확인을 해주세요.');
@@ -173,6 +216,44 @@ export default function ProfileEditScreen() {
         return;
       }
 
+      let imageUrl = currentProfile.imageUrl; // 기존 이미지 URL
+
+      let imageObjectName: string | null | undefined = undefined;
+
+      // 이미지가 변경된 경우 업로드
+      if (profileImage && profileImage !== currentProfile.imageUrl) {
+        setIsUploadingImage(true);
+        try {
+          // 1. Presigned URL 생성 (보안: objectNames만 받음)
+          console.log('프로필 이미지 업로드 시작');
+          const { urls: presignedUrls, objectNames } = await archiveAPI.generatePresignedUrls(
+            1, // 1개의 이미지
+            15, // 15분 유효
+            accessToken
+          );
+
+          // 2. 이미지 업로드
+          console.log('Presigned URL:', presignedUrls[0]);
+          await archiveAPI.uploadImageToStorage(presignedUrls[0], profileImage);
+          console.log('이미지 업로드 완료');
+
+          // 3. objectName 저장 (백엔드에서 publicUrl로 변환)
+          imageObjectName = objectNames[0];
+          console.log('업로드된 이미지 objectName:', imageObjectName);
+        } catch (error: any) {
+          console.error('이미지 업로드 실패:', error);
+          Alert.alert('오류', `이미지 업로드에 실패했습니다: ${error?.message || '알 수 없는 오류'}`);
+          setIsUploadingImage(false);
+          setIsSaving(false);
+          return;
+        } finally {
+          setIsUploadingImage(false);
+        }
+      } else if (profileImage === null && currentProfile.imageUrl) {
+        // 기본 이미지로 변경 (빈 문자열로 설정)
+        imageObjectName = '';
+      }
+
       const updateData: any = {
         brandInterests: selectedBrands,
       };
@@ -181,9 +262,17 @@ export default function ProfileEditScreen() {
       if (nickname !== currentProfile.nickname) {
         updateData.nickname = nickname;
       }
+
+      // 이미지가 변경된 경우만 전송 (보안: objectName 전송)
+      if (imageObjectName !== undefined) {
+        updateData.imageObjectName = imageObjectName;
+      }
       
       await memberAPI.updateProfile(accessToken, updateData);
 
+      // 프로필 재로드 플래그 설정
+      await AsyncStorage.setItem('shouldReloadProfile', 'true');
+      
       Alert.alert('성공', '프로필이 수정되었습니다.', [
         {
           text: '확인',
@@ -226,9 +315,9 @@ export default function ProfileEditScreen() {
 
         {/* Profile Image */}
         <View className="items-center mt-6 mb-8">
-          {currentProfile?.imageUrl ? (
+          {profileImage ? (
             <Image
-              source={{ uri: currentProfile.imageUrl }}
+              source={{ uri: profileImage }}
               className="w-32 h-32 rounded-full mb-4"
             />
           ) : (
@@ -237,17 +326,29 @@ export default function ProfileEditScreen() {
               style={{ backgroundColor: '#2F2F2F' }}
             >
               <Text className="text-white text-5xl font-bold">
-                {currentProfile?.nickname?.charAt(0) || '?'}
+                {nickname?.charAt(0) || '?'}
               </Text>
             </View>
           )}
-          <TouchableOpacity
-            className="rounded-full px-6 py-2"
-            style={{ backgroundColor: '#2F2F2F' }}
-            onPress={() => Alert.alert('알림', '이미지 수정 기능은 준비 중입니다.')}
-          >
-            <Text className="text-white text-sm font-bold">이미지 수정</Text>
-          </TouchableOpacity>
+          <View className="flex-row gap-2">
+            <TouchableOpacity
+              className="rounded-full px-6 py-2 flex-row items-center gap-2"
+              style={{ backgroundColor: '#2F2F2F' }}
+              onPress={pickImage}
+            >
+              <Camera size={16} color="#FFFFFF" />
+              <Text className="text-white text-sm font-bold">이미지 선택</Text>
+            </TouchableOpacity>
+            {profileImage && (
+              <TouchableOpacity
+                className="rounded-full px-6 py-2"
+                style={{ backgroundColor: '#9CA3AF' }}
+                onPress={useDefaultImage}
+              >
+                <Text className="text-white text-sm font-bold">기본 이미지</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
 
         {/* Nickname Section */}
@@ -355,7 +456,12 @@ export default function ProfileEditScreen() {
           disabled={isSaving}
         >
           {isSaving ? (
-            <ActivityIndicator color="#FFFFFF" />
+            <View className="flex-row items-center gap-2">
+              <ActivityIndicator color="#FFFFFF" />
+              {isUploadingImage && (
+                <Text className="text-white text-sm">이미지 업로드 중...</Text>
+              )}
+            </View>
           ) : (
             <Text className="text-white text-base font-bold">프로필 수정</Text>
           )}

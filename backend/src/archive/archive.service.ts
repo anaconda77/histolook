@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { 
   InvalidFilterException,
@@ -31,6 +32,10 @@ import {
   CommentItemDto,
 } from './dto/get-comments.dto';
 import {
+  GetArchiveCommentsResponseDto,
+  ArchiveCommentDto,
+} from './dto/get-archive-comments.dto';
+import {
   GetInterestArchivesQueryDto,
   GetInterestArchivesResponseDto,
   InterestArchiveItemDto,
@@ -44,12 +49,16 @@ import {
   GetCategoriesResponseDto,
   FilterItemDto,
 } from './dto/get-filters.dto';
+import { StorageService } from './storage.service';
 
 @Injectable()
 export class ArchiveService {
   private readonly PAGE_SIZE = 20;
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private storageService: StorageService,
+  ) {}
 
   async getArchives(
     query: GetArchivesQueryDto,
@@ -93,21 +102,102 @@ export class ArchiveService {
         where.category = { name: category };
       }
 
-      // 아카이브 조회
-      const archives = await this.prisma.archive.findMany({
-        where,
-        skip,
-        take: this.PAGE_SIZE + 1,
-        orderBy: { createdAt: 'desc' },
-        include: {
-          brand: true,
-          timeline: true,
-          category: true,
-        },
-      });
+      let items: any[] = [];
+      let hasNext = false;
 
-      const hasNext = archives.length > this.PAGE_SIZE;
-      const items = archives.slice(0, this.PAGE_SIZE);
+      if (userId) {
+        const member = await this.prisma.member.findUnique({
+          where: { id: userId },
+          select: { brandInterests: true },
+        });
+
+        const interestBrands = member?.brandInterests
+          ? member.brandInterests.split(',').map((name) => name.trim()).filter((name) => name.length > 0)
+          : [];
+
+        if (interestBrands.length > 0) {
+          const filters: Prisma.Sql[] = [Prisma.sql`a.deleted_at IS NULL`];
+          if (brand) {
+            filters.push(Prisma.sql`b.name = ${brand}`);
+          }
+          if (timeline) {
+            filters.push(Prisma.sql`t.name = ${timeline}`);
+          }
+          if (category) {
+            filters.push(Prisma.sql`c.name = ${category}`);
+          }
+
+          const archiveIdRows: Array<{ id: string }> = await this.prisma.$queryRaw(
+            Prisma.sql`
+              SELECT a.id
+              FROM archive a
+              JOIN brand b ON a.brand_id = b.id
+              JOIN timeline t ON a.timeline_id = t.id
+              JOIN category c ON a.category_id = c.id
+              WHERE ${Prisma.join(filters, ' AND ')}
+              ORDER BY
+                CASE WHEN b.name IN (${Prisma.join(interestBrands)}) THEN 1 ELSE 0 END DESC,
+                a.created_at DESC
+              OFFSET ${skip}
+              LIMIT ${this.PAGE_SIZE + 1}
+            `,
+          );
+
+          const archiveIds = archiveIdRows.map((row) => row.id);
+          hasNext = archiveIds.length > this.PAGE_SIZE;
+          const pageIds = archiveIds.slice(0, this.PAGE_SIZE);
+
+          if (pageIds.length > 0) {
+            const archives = await this.prisma.archive.findMany({
+              where: { id: { in: pageIds } },
+              include: {
+                brand: true,
+                timeline: true,
+                category: true,
+              },
+            });
+
+            const archiveMap = new Map(archives.map((archive) => [archive.id, archive]));
+            items = pageIds
+              .map((id) => archiveMap.get(id))
+              .filter((archive): archive is (typeof archives)[number] => !!archive);
+          } else {
+            items = [];
+          }
+        } else {
+          // 관심 브랜드가 없으면 기본 최신순으로 반환
+          const archives = await this.prisma.archive.findMany({
+            where,
+            skip,
+            take: this.PAGE_SIZE + 1,
+            orderBy: { createdAt: 'desc' },
+            include: {
+              brand: true,
+              timeline: true,
+              category: true,
+            },
+          });
+
+          hasNext = archives.length > this.PAGE_SIZE;
+          items = archives.slice(0, this.PAGE_SIZE);
+        }
+      } else {
+        // 비회원은 기본 최신순
+        const archives = await this.prisma.archive.findMany({
+          where,
+          skip,
+          take: this.PAGE_SIZE + 1,
+          orderBy: { createdAt: 'desc' },
+          include: {
+            brand: true,
+            timeline: true,
+            category: true,
+          },
+        });
+
+        hasNext = archives.length > this.PAGE_SIZE;
+        items = archives.slice(0, this.PAGE_SIZE);
+      }
 
       // 관심 아카이브 확인 (회원인 경우)
       let interestArchiveIds: Set<string> = new Set();
@@ -124,11 +214,41 @@ export class ArchiveService {
       }
 
       // 응답 데이터 구성
-      const archiveItems: ArchiveItemDto[] = items.map((archive) => ({
-        archiveId: archive.id,
-        imageUrls: archive.imageUrls,
-        isInterest: interestArchiveIds.has(archive.id),
-      }));
+      // 이미지 URL을 읽기용 Presigned URL로 변환
+      const archiveItems: ArchiveItemDto[] = await Promise.all(
+        items.map(async (archive) => {
+          let imageUrls: string[] = [];
+          
+          if (archive.imageUrls && archive.imageUrls.length > 0) {
+            try {
+              // 공개 URL에서 objectName 추출
+              const objectNames = archive.imageUrls.map((url) => {
+                // URL 형식: https://objectstorage.{region}.oraclecloud.com/n/{namespace}/b/{bucket}/o/{objectName}
+                const match = url.match(/\/o\/(.+)$/);
+                if (match) {
+                  return decodeURIComponent(match[1]);
+                }
+                // 이미 objectName인 경우
+                return url;
+              });
+              
+              // 읽기용 Presigned URL 생성
+              imageUrls = await this.storageService.generatePresignedReadUrls(objectNames);
+            } catch (error) {
+              console.error(`아카이브 ${archive.id}의 이미지 URL 변환 실패:`, error);
+              // 실패 시 원본 URL 사용 (공개 접근 불가능할 수 있음)
+              imageUrls = archive.imageUrls;
+            }
+          }
+          
+          return {
+            archiveId: archive.id,
+            imageUrls,
+            isInterest: interestArchiveIds.has(archive.id),
+            authorId: archive.authorId,
+          };
+        })
+      );
 
       return {
         brand: brand || undefined,
@@ -167,7 +287,7 @@ export class ArchiveService {
     }
 
     // 내 판정 정보 조회
-    let myJudgement: { isArchive: boolean; price?: number } | null = null;
+    let myJudgement: { isArchive: boolean; price?: number; comment?: string } | null = null;
     let isJudged = false;
     if (userId) {
       const judgement = await this.prisma.judgement.findFirst({
@@ -182,8 +302,22 @@ export class ArchiveService {
         myJudgement = {
           isArchive: judgement.isArchive,
           price: judgement.price ? Number(judgement.price) : undefined,
+          comment: judgement.comment ?? undefined,
         };
       }
+    }
+
+    // 관심 아카이브 확인 (회원인 경우)
+    let isInterest = false;
+    if (userId) {
+      const interest = await this.prisma.archiveInterest.findFirst({
+        where: {
+          archiveId,
+          memberId: userId,
+          deletedAt: null,
+        },
+      });
+      isInterest = !!interest;
     }
 
     // 대표 코멘트 조회
@@ -213,6 +347,27 @@ export class ArchiveService {
           }
         : undefined;
 
+    // 이미지 URL을 읽기용 Presigned URL로 변환
+    let imageUrls: string[] = [];
+    if (archive.imageUrls && archive.imageUrls.length > 0) {
+      try {
+        // 공개 URL에서 objectName 추출
+        const objectNames = archive.imageUrls.map((url) => {
+          const match = url.match(/\/o\/(.+)$/);
+          if (match) {
+            return decodeURIComponent(match[1]);
+          }
+          return url;
+        });
+        
+        // 읽기용 Presigned URL 생성
+        imageUrls = await this.storageService.generatePresignedReadUrls(objectNames);
+      } catch (error) {
+        console.error(`아카이브 상세 ${archive.id}의 이미지 URL 변환 실패:`, error);
+        imageUrls = archive.imageUrls;
+      }
+    }
+
     return {
       archiveId: archive.id,
       brand: archive.brand.name,
@@ -222,11 +377,12 @@ export class ArchiveService {
         ? Number(archive.averageJudgementPrice)
         : undefined,
       story: archive.story,
-      imageUrls: archive.imageUrls,
+      imageUrls,
       authorId: archive.authorId,
       authorImageUrl: archive.author.imageUrl ?? undefined,
       authorNickname: archive.author.nickname,
       isJudged,
+      isInterest: userId ? isInterest : undefined,
       myJudgement,
       comments,
       publishedAt: TimeUtil.getRelativeTime(archive.createdAt),
@@ -258,15 +414,39 @@ export class ArchiveService {
     const hasNext = archives.length > this.PAGE_SIZE;
     const items = archives.slice(0, this.PAGE_SIZE);
 
-    const archiveItems: MyArchiveItemDto[] = items.map((archive) => ({
-      archiveId: archive.id,
-      imageUrls: archive.imageUrls,
-      brand: archive.brand.name,
-      timeline: archive.timeline.name,
-      category: archive.category.name,
-      story: archive.story,
-      publishedAt: TimeUtil.getRelativeTime(archive.createdAt),
-    }));
+    // 이미지 URL을 읽기용 Presigned URL로 변환
+    const archiveItems: MyArchiveItemDto[] = await Promise.all(
+      items.map(async (archive) => {
+        let imageUrls: string[] = [];
+        
+        if (archive.imageUrls && archive.imageUrls.length > 0) {
+          try {
+            const objectNames = archive.imageUrls.map((url) => {
+              const match = url.match(/\/o\/(.+)$/);
+              if (match) {
+                return decodeURIComponent(match[1]);
+              }
+              return url;
+            });
+            
+            imageUrls = await this.storageService.generatePresignedReadUrls(objectNames);
+          } catch (error) {
+            console.error(`내 아카이브 ${archive.id}의 이미지 URL 변환 실패:`, error);
+            imageUrls = archive.imageUrls;
+          }
+        }
+        
+        return {
+          archiveId: archive.id,
+          imageUrls,
+          brand: archive.brand.name,
+          timeline: archive.timeline.name,
+          category: archive.category.krName,
+          story: archive.story,
+          publishedAt: TimeUtil.getRelativeTime(archive.createdAt),
+        };
+      })
+    );
 
     return {
       page,
@@ -285,13 +465,20 @@ export class ArchiveService {
       const timeline = await this.findTimeline(dto.timeline);
       const category = await this.findCategory(dto.category);
 
+      // objectNames를 publicUrls로 변환 (보안: 백엔드에서만 변환)
+      const imageUrls = dto.imageObjectNames
+        ? dto.imageObjectNames.map((objectName) =>
+            this.storageService.getPublicUrlFromObjectName(objectName),
+          )
+        : [];
+
       const archive = await this.prisma.archive.create({
         data: {
           brandId: brand.id,
           timelineId: timeline.id,
           categoryId: category.id,
           story: dto.story,
-          imageUrls: dto.imageUrls || [],
+          imageUrls,
           isJudgementAllow: dto.isJudgementAllow,
           isPriceJudgementAllow: dto.isPriceJudgementAllow,
           authorId: userId,
@@ -332,6 +519,13 @@ export class ArchiveService {
       const timeline = await this.findTimeline(dto.timeline);
       const category = await this.findCategory(dto.category);
 
+      // objectNames를 publicUrls로 변환 (보안: 백엔드에서만 변환)
+      const imageUrls = dto.imageObjectNames
+        ? dto.imageObjectNames.map((objectName) =>
+            this.storageService.getPublicUrlFromObjectName(objectName),
+          )
+        : [];
+
       await this.prisma.archive.update({
         where: { id: archiveId },
         data: {
@@ -339,7 +533,7 @@ export class ArchiveService {
           timelineId: timeline.id,
           categoryId: category.id,
           story: dto.story,
-          imageUrls: dto.imageUrls || [],
+          imageUrls,
           isJudgementAllow: dto.isJudgementAllow,
           isPriceJudgementAllow: dto.isPriceJudgementAllow,
         },
@@ -413,14 +607,14 @@ export class ArchiveService {
         data: {
           archiveId,
           memberId: userId,
-          isArchive: dto.isAchive,
+          isArchive: dto.isArchive,
           comment: dto.comment,
           price: dto.price ? BigInt(dto.price) : null,
         },
       });
 
-      // 평균 가격 업데이트
-      await this.updateAveragePrice(archiveId);
+      // judgement_cnt 증가 및 평균 가격 업데이트 (한 번의 업데이트로 처리)
+      await this.updateAveragePrice(archiveId, dto.isArchive && dto.price ? BigInt(dto.price) : null);
 
       return {
         judgementId: judgement.id,
@@ -480,6 +674,45 @@ export class ArchiveService {
     };
   }
 
+  async getArchiveComments(
+    archiveId: UUID,
+  ): Promise<GetArchiveCommentsResponseDto> {
+    // 아카이브 존재 여부 확인
+    const archive = await this.prisma.archive.findUnique({
+      where: { id: archiveId },
+    });
+
+    if (!archive || archive.deletedAt) {
+      throw new NotFoundException('존재하지 않는 아카이브 id');
+    }
+
+    // 아카이브에 달린 모든 판정 코멘트 조회 (코멘트가 있는 것만)
+    const judgements = await this.prisma.judgement.findMany({
+      where: {
+        archiveId,
+        comment: { not: null },
+      },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        member: true,
+      },
+    });
+
+    const comments: ArchiveCommentDto[] = judgements.map((judgement) => ({
+      judgementId: judgement.id,
+      isArchive: judgement.isArchive,
+      comment: judgement.comment ?? undefined,
+      memberId: judgement.memberId,
+      memberNickname: judgement.member.nickname,
+      memberImageUrl: judgement.member.imageUrl ?? undefined,
+      createdAt: TimeUtil.getRelativeTime(judgement.createdAt),
+    }));
+
+    return {
+      comments,
+    };
+  }
+
   async getInterestArchives(
     userId: UUID,
     query: GetInterestArchivesQueryDto,
@@ -503,10 +736,34 @@ export class ArchiveService {
     const hasNext = interests.length > this.PAGE_SIZE;
     const items = interests.slice(0, this.PAGE_SIZE);
 
-    const archiveItems: InterestArchiveItemDto[] = items.map((interest) => ({
-      archiveId: interest.archive.id,
-      imageUrls: interest.archive.imageUrls,
-    }));
+    // 이미지 URL을 읽기용 Presigned URL로 변환
+    const archiveItems: InterestArchiveItemDto[] = await Promise.all(
+      items.map(async (interest) => {
+        let imageUrls: string[] = [];
+        
+        if (interest.archive.imageUrls && interest.archive.imageUrls.length > 0) {
+          try {
+            const objectNames = interest.archive.imageUrls.map((url) => {
+              const match = url.match(/\/o\/(.+)$/);
+              if (match) {
+                return decodeURIComponent(match[1]);
+              }
+              return url;
+            });
+            
+            imageUrls = await this.storageService.generatePresignedReadUrls(objectNames);
+          } catch (error) {
+            console.error(`관심 아카이브 ${interest.archive.id}의 이미지 URL 변환 실패:`, error);
+            imageUrls = interest.archive.imageUrls;
+          }
+        }
+        
+        return {
+          archiveId: interest.archive.id,
+          imageUrls,
+        };
+      })
+    );
 
     return {
       page,
@@ -621,7 +878,7 @@ export class ArchiveService {
 
   private async findCategory(name: string) {
     const category = await this.prisma.category.findFirst({
-      where: { name },
+      where: { krName: name },
     });
 
     if (!category) {
@@ -659,12 +916,11 @@ export class ArchiveService {
       } else {
         // name === 'category'
         const categories = await this.prisma.category.findMany({
-          orderBy: { name: 'asc' },
-          select: { name: true },
+          select: { krName: true },
         });
 
         return {
-          categories: categories.map((category) => ({ name: category.name })),
+          categories: categories.map((category) => ({ name: category.krName })),
         };
       }
     } catch (error) {
@@ -674,27 +930,56 @@ export class ArchiveService {
     }
   }
 
-  private async updateAveragePrice(archiveId: UUID) {
-    const judgements = await this.prisma.judgement.findMany({
-      where: {
-        archiveId,
-        price: { not: null },
+  private async updateAveragePrice(archiveId: UUID, newPrice: BigInt | null = null) {
+    // archive를 한 번만 조회하여 judgement_cnt 확인
+    const archive = await this.prisma.archive.findUnique({
+      where: { id: archiveId },
+      select: {
+        judgementCnt: true,
       },
-      select: { price: true },
     });
 
-    if (judgements.length > 0) {
-      const total = judgements.reduce(
-        (sum, j) => sum + Number(j.price),
-        0,
-      );
-      const average = Math.round(total / judgements.length);
-
-      await this.prisma.archive.update({
-        where: { id: archiveId },
-        data: { averageJudgementPrice: BigInt(average) },
-      });
+    if (!archive) {
+      return;
     }
+
+    // judgement_cnt 증가
+    const newJudgementCnt = archive.judgementCnt + BigInt(1);
+
+    // 아카이브 판정이고 가격이 있는 경우에만 평균 가격 계산
+    let newAveragePrice: bigint | null = null;
+
+    if (newPrice !== null) {
+      // 가격이 있는 판정들의 합계와 개수를 집계 함수로 한 번에 계산
+      const priceStats = await this.prisma.judgement.aggregate({
+        where: {
+          archiveId,
+          price: { not: null },
+        },
+        _sum: {
+          price: true,
+        },
+        _count: {
+          price: true,
+        },
+      });
+
+      if (priceStats._count.price > 0 && priceStats._sum.price) {
+        const total = Number(priceStats._sum.price);
+        const count = priceStats._count.price;
+        const average = Math.round(total / count);
+        newAveragePrice = BigInt(average) as bigint;
+      }
+    }
+
+    // archive 테이블을 한 번만 업데이트 (judgement_cnt와 averageJudgementPrice 함께)
+    await this.prisma.archive.update({
+      where: { id: archiveId },
+      data: {
+        judgementCnt: newJudgementCnt,
+        averageJudgementPrice: newAveragePrice,
+      },
+    });
   }
 }
 

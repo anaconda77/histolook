@@ -198,10 +198,10 @@ export class AuthController {
       let redirectUrl: string;
       
       if (result.isRegistered) {
-        // 기존 회원 - JWT 토큰 발급해서 전달
+        // 기존 회원 - JWT 토큰 및 회원 정보 전달
         const authUser = await this.authService.getAuthUserById(result.authUserId);
         const tokens = await this.authService.generateTokensForMember(authUser.member!.id, result.authUserId);
-        redirectUrl = `histolook://kakao/callback?accessToken=${tokens.accessToken}&refreshToken=${tokens.refreshToken}&isRegistered=true`;
+        redirectUrl = `histolook://kakao/callback?accessToken=${tokens.accessToken}&refreshToken=${tokens.refreshToken}&isRegistered=true&memberId=${authUser.member!.id}&nickname=${encodeURIComponent(authUser.member!.nickname)}&role=${authUser.member!.role}`;
       } else {
         // 신규 회원 - authUserId 전달
         redirectUrl = `histolook://kakao/callback?authUserId=${result.authUserId}&provider=${result.provider}&isRegistered=false&createdAt=${encodeURIComponent(result.createdAt)}`;
@@ -228,10 +228,10 @@ export class AuthController {
       let redirectUrl: string;
       
       if (result.isRegistered) {
-        // 기존 회원 - JWT 토큰 발급해서 전달
+        // 기존 회원 - JWT 토큰 및 회원 정보 전달
         const authUser = await this.authService.getAuthUserById(result.authUserId);
         const tokens = await this.authService.generateTokensForMember(authUser.member!.id, result.authUserId);
-        redirectUrl = `histolook://google/callback?accessToken=${tokens.accessToken}&refreshToken=${tokens.refreshToken}&isRegistered=true`;
+        redirectUrl = `histolook://google/callback?accessToken=${tokens.accessToken}&refreshToken=${tokens.refreshToken}&isRegistered=true&memberId=${authUser.member!.id}&nickname=${encodeURIComponent(authUser.member!.nickname)}&role=${authUser.member!.role}`;
       } else {
         // 신규 회원 - authUserId 전달
         redirectUrl = `histolook://google/callback?authUserId=${result.authUserId}&provider=${result.provider}&isRegistered=false&createdAt=${encodeURIComponent(result.createdAt)}`;

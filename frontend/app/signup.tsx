@@ -152,10 +152,12 @@ export default function SignupScreen() {
         brandInterests: selectedBrands,
       });
 
-      // 토큰 저장
+      // 토큰 및 사용자 정보 저장
       await AsyncStorage.setItem('accessToken', result.accessToken);
       await AsyncStorage.setItem('refreshToken', result.refreshToken);
       await AsyncStorage.setItem('memberId', result.memberId);
+      await AsyncStorage.setItem('nickname', nickname);
+      await AsyncStorage.setItem('role', result.role);
 
       // 환영 화면으로 이동
       router.replace({ pathname: '/welcome', params: { nickname } });
